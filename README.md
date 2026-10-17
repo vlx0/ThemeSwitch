@@ -14,10 +14,12 @@
 ## ✨ Что делает
 
 - ⏰ Несколько **сценариев** с временем начала/конца и режимом (light/dark)
+- 📌 **Фиксированный режим** — `light` или `dark` всегда, выше сценариев
 - 🌅 Окна через полночь работают автоматически (19:00 → 08:00)
 - 📡 После записи в реестр бродкастит `WM_SETTINGCHANGE` через `user32`
-- 💾 Настройки в `config.json`
+- 💾 Настройки в `config.json` (создаётся при первом «Сохранить»)
 - 🪶 **Без зависимостей** — только стандартная библиотека Python
+- 📜 Ротация логов: 3 файла × 500 КБ (`themeswitch.log.1..3`)
 
 ---
 
@@ -30,24 +32,36 @@ python main.py
 ```
 
 > Только Windows 10/11. `requirements.txt` пустой — никакого `pip install`.
+> Для запуска без консоли: `pythonw.exe main.py`.
 
 При первом запуске откроется окно с двумя сценариями по умолчанию:
-`08:00 → 19:00 → light` и `19:00 → 08:00 → dark`. Галочка
-**«Автопланировщик»** запускает фоновый поток.
+`08:00 → 19:00 → light` и `19:00 → 08:00 → dark`. Внизу справа —
+переключатель **«Фиксировать»**: `(авто)/light/dark`.
+
+---
+
+## 🎛 Режимы работы
+
+**Авто по сценариям** (по умолчанию) — планировщик раз в 30 сек
+проверяет сценарии и применяет режим первого попавшего в окно.
+
+**Фиксировано light / dark** — игнорирует все сценарии, всегда держит
+выбранный режим. Удобно для презентаций, видеозвонков, работы в
+одном режиме весь день. В statusbar отображается `FORCED → light`.
 
 ---
 
 ## 🖱 Как это работает
 
-Когда по сценарию приходит время:
+Когда планировщик тикает:
 
-1. Планировщик определяет активный сценарий (берётся **первый**
-   активный в порядке списка)
-2. `theme.py` запускает `theme.ps1`
-3. PowerShell пишет в `HKCU\...\Themes\Personalize`
-   (`SystemUsesLightTheme` + `AppsUseLightTheme`)
-4. `user32!SendMessageTimeout` бродкастит `WM_SETTINGCHANGE` —
-   все приложения перерисовываются мгновенно
+1. Если `force_mode` задан — сразу применяет его (выше сценариев).
+2. Иначе — берёт первый активный сценарий (порядок = порядок в списке).
+3. `theme.py` запускает `theme.ps1`.
+4. PowerShell пишет в `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`
+   (`SystemUsesLightTheme` + `AppsUseLightTheme`).
+5. `user32!SendMessageTimeout` бродкастит `WM_SETTINGCHANGE` —
+   все приложения перерисовываются мгновенно.
 
 Тема — **настоящая**, не оверлей.
 
@@ -58,12 +72,12 @@ python main.py
 ```
 ThemeSwitch/
 ├── main.py              # Точка входа
-├── app.py               # Tkinter GUI
+├── app.py               # Tkinter GUI (Treeview, force combobox)
 ├── theme.py             # Обёртка subprocess → PowerShell
 ├── theme.ps1            # Запись в реестр + broadcast WM_SETTINGCHANGE
-├── scheduler.py         # Фоновый поток-планировщик
-├── config.py            # JSON-конфиг + Scenario dataclass
-├── logger.py            # Логи в themeswitch.log
+├── scheduler.py         # Фоновый поток-планировщик (snapshot под RLock)
+├── config.py            # JSON-конфиг + Scenario dataclass + RLock
+├── logger.py            # RotatingFileHandler + StreamHandler
 ├── config.json          # Создаётся при первом «Сохранить»
 ├── requirements.txt     # Пустой (только stdlib)
 ├── LICENSE              # MIT
@@ -76,23 +90,31 @@ ThemeSwitch/
 {
   "scenarios": [
     {
-      "start_hour": 21, "start_minute": 0,
-      "end_hour": 7,    "end_minute": 0,
+      "start_hour": 8, "start_minute": 0,
+      "end_hour": 19, "end_minute": 0,
+      "mode": "light",
+      "enabled": true
+    },
+    {
+      "start_hour": 19, "start_minute": 0,
+      "end_hour": 8, "end_minute": 0,
       "mode": "dark",
       "enabled": true
     }
   ],
-  "auto_start": true
+  "auto_start": true,
+  "force_mode": null
 }
 ```
 
 | Поле | Тип | Что значит |
 |---|---|---|
-| `start_hour` / `start_minute` | 0..23 / 0..59 | Когда переключить |
-| `end_hour` / `end_minute` | 0..23 / 0..59 | Когда переключить обратно |
-| `mode` | `light` / `dark` | Целевой режим |
-| `enabled` | bool | Сценарий активен |
-| `auto_start` | bool | Запускать планировщик сразу |
+| `scenarios[].start_hour` / `start_minute` | 0..23 / 0..59 | Когда переключить |
+| `scenarios[].end_hour` / `end_minute` | 0..23 / 0..59 | Когда переключить обратно |
+| `scenarios[].mode` | `light` / `dark` | Целевой режим |
+| `scenarios[].enabled` | bool | Сценарий активен |
+| `auto_start` | bool | Запускать планировщик сразу при старте |
+| `force_mode` | `light` / `dark` / `null` | Фиксированный режим (выше сценариев) |
 
 ---
 
@@ -109,9 +131,10 @@ pyinstaller --onefile --noconsole --name ThemeSwitch main.py
 
 - Только Windows 10/11 (использует системный реестр + `user32`).
 - Не меняет обои и контрастные темы оформления (Accent) — только Light/Dark.
-- Если вы меняете тему вручную в настройках Windows, ThemeSwitch при
-  следующем тике планировщика перезапишет ваше изменение, если есть
-  активный сценарий.
+- При включённом `force_mode` ручное переключение Windows будет
+  перезаписано при следующем тике планировщика (30 сек).
+- При включённом автопланировщике и активном сценарии ручное
+  переключение тоже будет перезаписано.
 
 ## 📝 Лицензия
 
