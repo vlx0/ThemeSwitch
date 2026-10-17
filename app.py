@@ -142,7 +142,7 @@ class ThemeApp:
             side=tk.LEFT, padx=(4, 0)
         )
 
-        # --- bottom: автозапуск ---
+        # --- bottom: автозапуск + force ---
         bot = ttk.Frame(self.root, padding=8)
         bot.pack(fill=tk.X)
 
@@ -153,6 +153,19 @@ class ThemeApp:
             variable=self.auto_var,
             command=self._on_toggle_auto,
         ).pack(side=tk.LEFT)
+
+        # Combobox: (авто) / light / dark. По умолчанию — текущее значение из config.
+        ttk.Label(bot, text="  Фиксировать:").pack(side=tk.LEFT)
+        force_display = self.config.force_mode if self.config.force_mode in ("light", "dark") else "(авто)"
+        self.force_var = tk.StringVar(value=force_display)
+        ttk.Combobox(
+            bot,
+            textvariable=self.force_var,
+            values=("(авто)", "light", "dark"),
+            state="readonly",
+            width=8,
+        ).pack(side=tk.LEFT, padx=(4, 0))
+        self.force_var.trace_add("write", lambda *_: self._on_force_change())
 
         ttk.Button(bot, text="Сохранить", command=self._save).pack(side=tk.RIGHT)
         ttk.Button(bot, text="Выход", command=self.quit_app).pack(side=tk.RIGHT, padx=(0, 4))
@@ -205,7 +218,24 @@ class ThemeApp:
         if not in_window:
             self.root.after(0, lambda: self.status_var.set("Нет активного сценария"))
             return
-        self.root.after(0, lambda: self.status_var.set(f"Активен: {label} → {mode}"))
+        if label == "FORCED":
+            self.root.after(0, lambda: self.status_var.set(f"FORCED → {mode}"))
+        else:
+            self.root.after(0, lambda: self.status_var.set(f"Активен: {label} → {mode}"))
+
+    def _on_force_change(self, _event=None):
+        sel = self.force_var.get()
+        if sel == "(авто)":
+            self.config.force_mode = None
+        else:
+            self.config.force_mode = sel  # "light" / "dark"
+        # Сразу даём планировщику перечитать + сохраняем на диск
+        self.scheduler.update_config(self.config)
+        self._save()
+        if self.config.force_mode:
+            self.status_var.set(f"Фиксировано: {self.config.force_mode}")
+        else:
+            self.status_var.set("Авто по сценариям")
 
     def _on_toggle_auto(self):
         self.config.auto_start = self.auto_var.get()

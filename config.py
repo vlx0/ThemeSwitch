@@ -66,6 +66,9 @@ class Scenario:
 class Config:
     scenarios: list[Scenario] = field(default_factory=list)
     auto_start: bool = True
+    # "light" / "dark" — принудительно держим этот режим всегда
+    # (выше сценариев); None — обычная логика по сценариям.
+    force_mode: str | None = None
     # Lock защищает scenarios от конкурентного доступа
     # (UI-thread мутирует add/remove/edit, scheduler-thread читает каждый тик).
     _lock: threading.RLock = field(
@@ -115,9 +118,13 @@ class Config:
             scenarios = [Scenario.from_dict(s) for s in raw.get("scenarios", [])]
             if not scenarios:
                 return cls.create_default()
+            fm = raw.get("force_mode")
+            if fm not in ("light", "dark", None):
+                fm = None
             return cls(
                 scenarios=scenarios,
                 auto_start=bool(raw.get("auto_start", True)),
+                force_mode=fm,
             )
         except (json.JSONDecodeError, TypeError, ValueError, KeyError):
             return cls.create_default()
@@ -126,6 +133,7 @@ class Config:
         data = {
             "scenarios": [s.to_dict() for s in self.scenarios],
             "auto_start": self.auto_start,
+            "force_mode": self.force_mode,
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
