@@ -62,7 +62,7 @@ class ThemeController:
 
 # ---------- Сворачивание в трей ----------
 class Tray:
-    def __init__(self, app: "App"):
+    def __init__(self, app: "ThemeApp"):
         self._app = app
         self._icon = None
 
@@ -105,7 +105,7 @@ class Tray:
 
 
 # ---------- Главное окно ----------
-class App:
+class ThemeApp:
     REFRESH_INTERVAL_MS = 30_000  # как у scheduler
 
     def __init__(self):

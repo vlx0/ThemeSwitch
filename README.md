@@ -1,67 +1,118 @@
-# ThemeSwitch
+# 🎨 ThemeSwitch
 
-> Планировщик светлой/тёмной темы Windows 10/11 по расписанию. Без прав админа, реальное системное изменение через реестр.
+Планировщик светлой/тёмной темы Windows 10/11. По расписанию переключает
+режим в реестре и рассылает `WM_SETTINGCHANGE` — тема применяется
+мгновенно во всех приложениях.
 
-## Что делает
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078d4?logo=windows)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Dependencies](https://img.shields.io/badge/Dependencies-zero-brightgreen)
 
-* Переключает **SystemUsesLightTheme** и **AppsUseLightTheme** в `HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`.
-* Делает broadcast `WM_SETTINGCHANGE` через `user32!SendMessageTimeout` — тема применяется мгновенно во всех приложениях, без перезапуска.
-* Планировщик в фоне раз в 30 секунд проверяет активные сценарии и применяет нужный режим.
-* GUI на Tkinter: список сценариев «08:00 → 19:00 → light», кнопка «Применить сейчас», сворачивание в трей.
-* Всё в одном окне — без сложных настроек.
+---
 
-## Как установить
+## ✨ Что делает
 
-Скачайте `main.py`, `app.py`, `theme.py`, `theme.ps1`, `config.py`, `scheduler.py`, `logger.py` в любую директорию. Запустите:
+- ⏰ Несколько **сценариев** с временем начала/конца и режимом (light/dark)
+- 🌅 Окна через полночь работают автоматически (19:00 → 08:00)
+- 📡 После записи в реестр бродкастит `WM_SETTINGCHANGE` через `user32`
+- 💾 Настройки в `config.json`
+- 🪶 **Без зависимостей** — только стандартная библиотека Python
 
-```cmd
+---
+
+## 🚀 Запуск
+
+```powershell
+git clone https://github.com/<your-username>/ThemeSwitch.git
+cd ThemeSwitch
 python main.py
 ```
 
-**Зависимости**: только Python 3.8+ (используется только stdlib). Для трея опционально `pystray` + `Pillow`.
+> Только Windows 10/11. `requirements.txt` пустой — никакого `pip install`.
 
-## Как использовать
+При первом запуске откроется окно с двумя сценариями по умолчанию:
+`08:00 → 19:00 → light` и `19:00 → 08:00 → dark`. Галочка
+**«Автопланировщик»** запускает фоновый поток.
 
-1. Запустите `python main.py`.
-2. В окне уже есть два сценария по умолчанию:
-   * `08:00 → 19:00 → light` (рабочий день — светлая)
-   * `19:00 → 08:00 → dark` (вечер/ночь — тёмная)
-3. Двойной клик по сценарию — редактирование (время, режим, активность).
-4. «Переключить сейчас» — мгновенное переключение без расписания.
-5. Галочка «Автопланировщик» — запуск/остановка фонового потока.
+---
 
-Все сценарии сохраняются в `config.json` рядом со скриптом.
+## 🖱 Как это работает
 
-## Архитектура
+Когда по сценарию приходит время:
+
+1. Планировщик определяет активный сценарий (берётся **первый**
+   активный в порядке списка)
+2. `theme.py` запускает `theme.ps1`
+3. PowerShell пишет в `HKCU\...\Themes\Personalize`
+   (`SystemUsesLightTheme` + `AppsUseLightTheme`)
+4. `user32!SendMessageTimeout` бродкастит `WM_SETTINGCHANGE` —
+   все приложения перерисовываются мгновенно
+
+Тема — **настоящая**, не оверлей.
+
+---
+
+## 📁 Структура
 
 ```
-Python (main.py)
-   └── GUI (app.py, Tkinter)
-         └── theme.py → PowerShell (theme.ps1)
-                          └── user32!SendMessageTimeout(WM_SETTINGCHANGE)
-         └── scheduler.py → каждые 30 сек проверяет сценарии
-                          └── theme.py → переключение
+ThemeSwitch/
+├── main.py              # Точка входа
+├── app.py               # Tkinter GUI
+├── theme.py             # Обёртка subprocess → PowerShell
+├── theme.ps1            # Запись в реестр + broadcast WM_SETTINGCHANGE
+├── scheduler.py         # Фоновый поток-планировщик
+├── config.py            # JSON-конфиг + Scenario dataclass
+├── logger.py            # Логи в themeswitch.log
+├── config.json          # Создаётся при первом «Сохранить»
+├── requirements.txt     # Пустой (только stdlib)
+├── LICENSE              # MIT
+└── README.md
 ```
 
-* **theme.ps1** — переключение через реестр + broadcast. Прямое COM-API для смены темы в Windows нет, реестр — единственный стабильный путь.
-* **theme.py** — обёртка subprocess → powershell.
-* **scheduler.py** — фоновый поток.
-* **app.py** — GUI на Tkinter.
-* **config.py** — JSON-конфиг сценариев.
-* **logger.py** — логи в `themeswitch.log` + stderr.
+## 🎛 Настройки `config.json`
 
-## Почему реестр, а не COM
+```json
+{
+  "scenarios": [
+    {
+      "start_hour": 21, "start_minute": 0,
+      "end_hour": 7,    "end_minute": 0,
+      "mode": "dark",
+      "enabled": true
+    }
+  ],
+  "auto_start": true
+}
+```
 
-В Windows 10/11 нет стабильного COM-интерфейса для программной смены темы. `IPolicyConfigClient` для аудио есть, но для тем только реестр. После записи в реестр нужно разослать `WM_SETTINGCHANGE` через `SendMessageTimeout`, иначе некоторые приложения не обновятся до перезапуска.
+| Поле | Тип | Что значит |
+|---|---|---|
+| `start_hour` / `start_minute` | 0..23 / 0..59 | Когда переключить |
+| `end_hour` / `end_minute` | 0..23 / 0..59 | Когда переключить обратно |
+| `mode` | `light` / `dark` | Целевой режим |
+| `enabled` | bool | Сценарий активен |
+| `auto_start` | bool | Запускать планировщик сразу |
 
-## Ограничения
+---
 
-* Требует Windows 10 1903+ или Windows 11.
-* Не меняет обои и контрастные темы оформления (Accent) — только Light/Dark.
-* Если вы меняете тему вручную в настройках Windows, ThemeSwitch при следующем тике планировщика перезапишет ваше изменение, если есть активный сценарий.
+## 🪟 Сборка в .exe
 
-## Лицензия
+```powershell
+pip install pyinstaller
+pyinstaller --onefile --noconsole --name ThemeSwitch main.py
+```
 
-MIT — см. COPYING.
-</content>
-</invoke>
+---
+
+## 🐛 Известные ограничения
+
+- Только Windows 10/11 (использует системный реестр + `user32`).
+- Не меняет обои и контрастные темы оформления (Accent) — только Light/Dark.
+- Если вы меняете тему вручную в настройках Windows, ThemeSwitch при
+  следующем тике планировщика перезапишет ваше изменение, если есть
+  активный сценарий.
+
+## 📝 Лицензия
+
+MIT — делай что хочешь, только копирайт сохрани.

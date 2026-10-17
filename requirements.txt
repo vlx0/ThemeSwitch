@@ -1,4 +1,2 @@
-# ThemeSwitch использует только Python stdlib.
-# Опционально (для иконки в трее):
-pystray>=0.19
-Pillow>=9.0
+# ThemeSwitch использует только стандартную библиотеку Python.
+# Поддерживается Python 3.8+.

@@ -1,0 +1,20 @@
+День 55/365 · неделя 8 — «Свет и тень по расписанию»
+
+ThemeSwitch — планировщик light/dark темы Windows 10/11.
+
+Пишет в HKCU\Software\Microsoft\...\Themes\Personalize (SystemUsesLightTheme + AppsUseLightTheme), затем бродкастит WM_SETTINGCHANGE через user32 — тема применяется мгновенно во всех приложениях.
+
+Что внутри:
+• Python stdlib + Tkinter GUI
+• PowerShell для записи в реестр (без прав админа)
+• Фоновый scheduler раз в 30 сек проверяет активные сценарии
+• Сценарии вроде «08:00 → 19:00 → light», «19:00 → 08:00 → dark»
+• Кнопка «Переключить сейчас», опциональный трей
+
+Почему не COM: на этой сборке Windows 10 нет COM-интерфейса для смены темы. MMAudioEngine.dll, где он обычно есть, отсутствует. Реестр — единственный стабильный путь, и он работает без админа.
+
+Размер: ~28 КБ, лицензия MIT.
+
+https://github.com/vlx0/ThemeSwitch
+
+#themeswitch #windows #ui #python #opensource #daily

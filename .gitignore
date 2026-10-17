@@ -1,16 +1,28 @@
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
+*$py.class
+*.so
 
-# Config and logs (per-user)
-config.json
-themeswitch.log
+# Virtual env
+.venv/
+venv/
+env/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
+*.swp
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Project
+config.json
+build/
+dist/
+*.spec
+
+# Logs
+themeswitch.log

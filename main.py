@@ -1,23 +1,11 @@
-"""
-main.py
-=======
-Точка входа. Запускает GUI из app.py.
+"""main.py — точка входа для ThemeSwitch."""
 
-Использование:
-    python main.py
-"""
-
-import sys
-
-from logger import setup as log_setup
+from app import ThemeApp
 
 
-def main() -> int:
-    log_setup()  # обязательно до первого лога
-    from app import App
-    App().run()
-    return 0
+def main() -> None:
+    ThemeApp().run()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
