@@ -216,14 +216,19 @@ class ThemeApp:
         self._save()
 
     def _toggle_now(self):
-        # Синхронный get_mode() — это исключение из правила не блокировать UI,
-        # но кнопка редкая, а без текущего режима мы не знаем что включить.
-        try:
-            cur = get_mode() or "dark"
-        except Exception:
-            cur = "dark"
-        new = "dark" if cur == "light" else "light"
-        ok = theme_set_mode(new)
+        # get_mode() синхронно дёргает PowerShell — делаем в воркере,
+        # чтобы GUI не зависал на 10 сек если PS тупит.
+        def worker():
+            try:
+                cur = get_mode() or "dark"
+            except Exception:
+                cur = "dark"
+            new = "dark" if cur == "light" else "light"
+            ok = theme_set_mode(new)
+            self.root.after(0, lambda: self._apply_toggle_result(new, ok))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_toggle_result(self, new, ok):
         if ok:
             self.mode_var.set(new)
             self.status_var.set(f"Переключено на {new}")

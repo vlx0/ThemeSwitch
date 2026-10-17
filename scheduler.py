@@ -79,7 +79,9 @@ class Scheduler:
     # ------------------------------------------------------------------ #
     def _active_match(self, now: datetime) -> tuple[str, str] | None:
         """Возвращает (mode, label) для первого активного сценария."""
-        for idx, s in enumerate(self._config.scenarios):
+        # snapshot() делает копию под lock — UI-thread может в это время
+        # мутировать config.scenarios, мы итерируем уже безопасный список.
+        for idx, s in enumerate(self._config.snapshot()):
             if not s.enabled:
                 continue
             try:

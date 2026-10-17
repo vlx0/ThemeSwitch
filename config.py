@@ -9,6 +9,7 @@ config.py
 
 import json
 import os
+import threading
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 
@@ -65,20 +66,33 @@ class Scenario:
 class Config:
     scenarios: list[Scenario] = field(default_factory=list)
     auto_start: bool = True
+    # Lock защищает scenarios от конкурентного доступа
+    # (UI-thread мутирует add/remove/edit, scheduler-thread читает каждый тик).
+    _lock: threading.RLock = field(
+        default_factory=threading.RLock, repr=False, compare=False
+    )
 
     # ------------------------------------------------------------------ #
     def active_scenarios(self) -> list[Scenario]:
-        return [s for s in self.scenarios if s.enabled]
+        with self._lock:
+            return [s for s in self.scenarios if s.enabled]
 
     def add_scenario(self, scenario: Scenario | None = None) -> Scenario:
-        if scenario is None:
-            scenario = Scenario(*DEFAULT_SCENARIO_DAY, enabled=True)
-        self.scenarios.append(scenario)
-        return scenario
+        with self._lock:
+            if scenario is None:
+                scenario = Scenario(*DEFAULT_SCENARIO_DAY, enabled=True)
+            self.scenarios.append(scenario)
+            return scenario
 
     def remove_scenario(self, index: int) -> None:
-        if 0 <= index < len(self.scenarios):
-            del self.scenarios[index]
+        with self._lock:
+            if 0 <= index < len(self.scenarios):
+                del self.scenarios[index]
+
+    def snapshot(self) -> list[Scenario]:
+        """Копия списка сценариев под lock — безопасно для итерации вне lock."""
+        with self._lock:
+            return list(self.scenarios)
 
     # ------------------------------------------------------------------ #
     @classmethod
