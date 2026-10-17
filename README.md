@@ -4,7 +4,7 @@
 
 ## Что делает
 
-* Переключает **SystemUsesLightTheme** и **AppsUseLightThread** в `HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`.
+* Переключает **SystemUsesLightTheme** и **AppsUseLightTheme** в `HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`.
 * Делает broadcast `WM_SETTINGCHANGE` через `user32!SendMessageTimeout` — тема применяется мгновенно во всех приложениях, без перезапуска.
 * Планировщик в фоне раз в 30 секунд проверяет активные сценарии и применяет нужный режим.
 * GUI на Tkinter: список сценариев «08:00 → 19:00 → light», кнопка «Применить сейчас», сворачивание в трей.
