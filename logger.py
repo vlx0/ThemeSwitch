@@ -10,6 +10,7 @@ logger.py
 import logging
 import sys
 import traceback
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
@@ -36,12 +37,21 @@ def setup() -> logging.Logger:
             "%(asctime)s [%(levelname)s] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
-        fh = logging.FileHandler(log_path, encoding="utf-8")
+        # Ротация: 3 файла по ~500 КБ. При долгом простое лог не уйдёт в гигант.
+        fh = RotatingFileHandler(
+            log_path, maxBytes=500_000, backupCount=3, encoding="utf-8"
+        )
         fh.setFormatter(fmt)
         logger.addHandler(fh)
 
+        # encoding на stderr — иначе cp1251 PowerShell падает на unicode (→).
+        # errors='replace' чтобы любые битые символы не валили handler.
         sh = logging.StreamHandler(stream=sys.stderr)
         sh.setFormatter(fmt)
+        try:
+            sh.stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore
+        except (AttributeError, OSError):
+            pass  # Python <3.7 или уже сконфигурирован
         logger.addHandler(sh)
 
     # Ловим всё, что не поймали
