@@ -9,6 +9,7 @@ logger.py
 
 import logging
 import sys
+import traceback
 from pathlib import Path
 
 
@@ -49,11 +50,8 @@ def setup() -> logging.Logger:
             sys.__excepthook__(exc_type, exc_value, exc_tb)
             return
         logger.error(
-            "UNCAUGHT: %s", "".join(
-                __import__("traceback").format_exception(
-                    exc_type, exc_value, exc_tb
-                )
-            )
+            "UNCAUGHT: %s",
+            "".join(traceback.format_exception(exc_type, exc_value, exc_tb)),
         )
     sys.excepthook = _hook
 

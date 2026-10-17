@@ -113,12 +113,17 @@ class Scheduler:
                     else:
                         ok = self._filter.disable()
                         log.info("Auto: no active scenario, theme unchanged (ok=%s)", ok)
+                    # Обновляем last_state ДО callback'а — иначе при падении
+                    # callback'а планировщик будет retry'ить на каждом тике.
                     last_state = current
                     if self._on_state_change:
                         in_window = current is not None
                         mode = current[0] if current else "—"
                         label = current[1] if current else ""
-                        self._on_state_change(in_window, mode, label)
+                        try:
+                            self._on_state_change(in_window, mode, label)
+                        except Exception:
+                            log.exception("on_state_change callback failed")
             except Exception:
                 log.exception("Scheduler tick failed")
 

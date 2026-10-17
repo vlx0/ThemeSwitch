@@ -17,15 +17,14 @@ import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
-from datetime import datetime
 
 from config import Config, Scenario, config_path
-from logger import setup as log_setup, get as get_log
+from logger import setup as log_setup
 from scheduler import Scheduler
 from theme import get_mode, set_mode as theme_set_mode
 
 
-log = get_log() if False else log_setup()
+log = log_setup()
 
 
 # ---------- ThemeController: мост между scheduler и реальной системой ----------
@@ -58,50 +57,6 @@ class ThemeController:
 
     def last_applied(self) -> str | None:
         return self._last
-
-
-# ---------- Сворачивание в трей ----------
-class Tray:
-    def __init__(self, app: "ThemeApp"):
-        self._app = app
-        self._icon = None
-
-    def install(self) -> bool:
-        try:
-            import pystray
-            from pystray import MenuItem as Item
-            from PIL import Image, ImageDraw
-        except ImportError:
-            log.warning("pystray/Pillow not installed — skip tray")
-            return False
-
-        def on_show(icon, item):
-            icon.stop()
-            self._app.after(0, self._app.show_window)
-
-        def on_quit(icon, item):
-            icon.stop()
-            self._app.after(0, self._app.quit_app)
-
-        def make_icon():
-            img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
-            d = ImageDraw.Draw(img)
-            d.rectangle((6, 6, 26, 26), fill=(80, 80, 80, 255))
-            d.rectangle((10, 10, 22, 22), fill=(200, 200, 200, 255))
-            return img
-
-        menu = pystray.Menu(
-            Item("Show", on_show, default=True),
-            Item("Quit", on_quit),
-        )
-        self._icon = pystray.Icon("ThemeSwitch", make_icon(), "ThemeSwitch", menu)
-
-        t = threading.Thread(target=self._icon.run, daemon=True)
-        t.start()
-        return True
-
-    def notify_hide(self):
-        pass
 
 
 # ---------- Главное окно ----------
@@ -220,9 +175,20 @@ class ThemeApp:
             )
 
     def _refresh_current_mode(self):
-        m = get_mode()
+        # Не блокируем UI: get_mode() дёргает PowerShell синхронно,
+        # поэтому запускаем его в фоне, а UI обновляем через after().
+        def worker():
+            try:
+                m = get_mode()
+            except Exception as e:
+                log.exception("get_mode failed")
+                m = None
+            self.root.after(0, lambda: self._apply_refreshed_mode(m))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_refreshed_mode(self, m):
         if m:
-            self.mode_var.set("light" if m == "light" else "dark")
+            self.mode_var.set(m)
             self.status_var.set(f"Текущий режим: {m}")
         else:
             self.mode_var.set("?")
@@ -250,12 +216,19 @@ class ThemeApp:
         self._save()
 
     def _toggle_now(self):
-        cur = get_mode() or "dark"
+        # Синхронный get_mode() — это исключение из правила не блокировать UI,
+        # но кнопка редкая, а без текущего режима мы не знаем что включить.
+        try:
+            cur = get_mode() or "dark"
+        except Exception:
+            cur = "dark"
         new = "dark" if cur == "light" else "light"
         ok = theme_set_mode(new)
         if ok:
             self.mode_var.set(new)
             self.status_var.set(f"Переключено на {new}")
+            # Обновим _last, чтобы планировщик зря не дёргал тот же режим
+            self.controller._last = new
         else:
             messagebox.showerror("Ошибка", f"Не удалось переключить тему на {new}")
 
@@ -335,7 +308,12 @@ class ThemeApp:
         )
 
     def _save(self):
-        self.config.save(config_path())
+        try:
+            self.config.save(config_path())
+        except OSError as e:
+            log.error("save failed: %s", e)
+            self.status_var.set(f"ОШИБКА сохранения: {e}")
+            return
         self.scheduler.update_config(self.config)
         self.status_var.set(f"Сохранено: {len(self.config.scenarios)} сценариев")
 
@@ -350,13 +328,8 @@ class ThemeApp:
         self._refresh_current_mode()
 
     def _on_close(self):
-        # сворачиваем в трей, если есть pystray
-        tray = getattr(self, "_tray", None)
-        if tray and tray.install():
-            self.root.withdraw()
-            tray.notify_hide()
-        else:
-            self.quit_app()
+        # Без трея (pystray/Pillow не включены в зависимости) — закрытие окна = выход.
+        self.quit_app()
 
     def quit_app(self):
         try:
